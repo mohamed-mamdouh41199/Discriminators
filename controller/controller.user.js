@@ -1,45 +1,91 @@
-const userDb = require("../model/model.user");
+const User = require("../model/model.user").User;
+const Doctor = require("../model/model.user").Doctor;
+const Patient = require("../model/model.user").Patient;
+const Admin = require("../model/model.user").Admin;
 const bcrypt = require("bcrypt");
 
 const createUser = async (req, res) => {
   try {
-    if (!req.body) {
-      return res.status(400).json({ message: "Request body is required" });
-    }
-    if (!req.body.name || !req.body.email || !req.body.password) {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password || !role) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    const { name, email, password } = req.body;
+    // Validate role
+    const mapping = { doctor: Doctor, patient: Patient, admin: Admin };
+    const Model = mapping[role];
+    console.log("Model", Model);
+    
+    if (!Model) return res.status(400).json({ message: "Invalid role" });
 
-    const existingUser = await userDb.findOne({ email });
-    if (existingUser) {
+    // Check email uniqueness
+    const existing = await User.findOne({ email });
+    if (existing) {
       return res.status(400).json({ message: "User already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new userDb({
-      name,
-      email,
-      password: hashedPassword,
-    });
+    // Hash & create via discriminator
+    const hashed = await bcrypt.hash(password, 10);
+    const newUser = new Model({ name, email, password: hashed , ...req.body});
     await newUser.save();
-    res.status(201).json({ message: "User created successfully" });
+
+    res
+      .status(201)
+      .json({ message: "User created successfully", user: newUser });
   } catch (error) {
     console.error("Error creating user:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
-const getUser = async (req, res) => {
-  try {
-    const { email } = req.query;
 
-    const user = await user;
-    Db.findOne({ email });
+const getRoleUser = async (req, res) => {
+  try {
+    const { role } = req.params;
+    const mapping = { doctor: Doctor, patient: Patient, admin: Admin };
+    const Model = mapping[role];
+
+    if (!Model) return res.status(400).json({ message: "Invalid role" });
+
+    const users = await Model.find();
+    res.status(200).json({ users });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find();
+    res.status(200).json({ users });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await userDb.findById(id);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
+    res.status(200).json({ user });
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+const getUserByEmail = async (req, res) => {
+  try {
+    const { email } = req.params;
 
+    const user = await userDb.find({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
     res.status(200).json({ user });
   } catch (error) {
     console.error("Error fetching user:", error);
@@ -49,5 +95,8 @@ const getUser = async (req, res) => {
 
 module.exports = {
   createUser,
-  getUser,
+  getAllUsers,
+  getUserById,
+  getUserByEmail,
+  getRoleUser
 };
